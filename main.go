@@ -7,8 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"instgo/ig"
-	"instgo/tui"
+	"github.com/dck/instgo/ig"
+	"github.com/dck/instgo/tui"
 )
 
 func main() {

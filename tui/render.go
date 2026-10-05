@@ -8,7 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"instgo/ig"
+	"github.com/dck/instgo/ig"
 )
 
 const groupGap = 5 * time.Minute

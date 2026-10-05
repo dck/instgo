@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"instgo/ig"
+	"github.com/dck/instgo/ig"
 )
 
 func ids(items []ig.Item) string {

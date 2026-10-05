@@ -5,7 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"instgo/ig"
+	"github.com/dck/instgo/ig"
 )
 
 func TestLoginAcceptsTyping(t *testing.T) {

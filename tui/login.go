@@ -11,7 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"instgo/ig"
+	"github.com/dck/instgo/ig"
 )
 
 const loginTimeout = 3 * time.Minute

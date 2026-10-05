@@ -1,4 +1,4 @@
-module instgo
+module github.com/dck/instgo
 
 go 1.26.0
 
