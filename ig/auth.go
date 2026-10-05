@@ -2,12 +2,14 @@ package ig
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -243,4 +245,47 @@ func jazoest(s string) string {
 		sum += int(r)
 	}
 	return "2" + strconv.Itoa(sum)
+}
+
+var sessionIDPrefix = regexp.MustCompile(`^\d+`)
+
+func (c *Client) LoginBySessionID(ctx context.Context, sessionID string) error {
+	sessionID = strings.TrimSpace(sessionID)
+	if decoded, err := url.QueryUnescape(sessionID); err == nil {
+		sessionID = url.QueryEscape(decoded)
+	}
+	userID := sessionIDPrefix.FindString(sessionID)
+	if len(sessionID) <= 30 || userID == "" {
+		return errors.New("that does not look like an Instagram sessionid cookie")
+	}
+	auth := dumps(obj{{"ds_user_id", userID}, {"sessionid", sessionID}, {"should_use_header_over_cookies", true}})
+	c.mu.Lock()
+	c.s.Cookies = map[string]string{"sessionid": sessionID, "ds_user_id": userID}
+	c.s.Authorization = "Bearer IGT:2:" + base64.StdEncoding.EncodeToString([]byte(auth))
+	c.s.UserID = userID
+	c.mu.Unlock()
+	debugLog.Printf("login by browser session start user_id=%s", userID)
+	body, err := c.get(ctx, "users/"+userID+"/info/", nil)
+	if err != nil {
+		debugLog.Printf("login by browser session result: %v", err)
+		_ = c.ClearAuth()
+		if rl := c.throttled(err); rl != nil {
+			return rl
+		}
+		if IsLoginRequired(err) {
+			return errors.New("instagram rejected that session, log in again in Firefox and copy a fresh sessionid")
+		}
+		return err
+	}
+	var r struct {
+		User struct {
+			Username string `json:"username"`
+		} `json:"user"`
+	}
+	_ = json.Unmarshal(body, &r)
+	c.mu.Lock()
+	c.s.Username = r.User.Username
+	c.mu.Unlock()
+	debugLog.Printf("login by browser session result: ok username=%s", r.User.Username)
+	return c.save()
 }

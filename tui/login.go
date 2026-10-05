@@ -22,6 +22,7 @@ const (
 	stepUsername loginStep = iota
 	stepPassword
 	stepCode
+	stepSession
 )
 
 type loginResultMsg struct{ err error }
@@ -37,6 +38,7 @@ type loginModel struct {
 	user    textinput.Model
 	pass    textinput.Model
 	code    textinput.Model
+	session textinput.Model
 	spinner spinner.Model
 	busy    string
 	info    string
@@ -65,11 +67,18 @@ func newLogin(client *ig.Client, notice string) loginModel {
 	code.CharLimit = 8
 	code.SetWidth(32)
 
+	session := textinput.New()
+	session.Prompt = "sessionid "
+	session.Placeholder = "paste the cookie value"
+	session.EchoMode = textinput.EchoPassword
+	session.SetWidth(32)
+
 	m := loginModel{
 		client:  client,
 		user:    user,
 		pass:    pass,
 		code:    code,
+		session: session,
 		spinner: spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(lipgloss.NewStyle().Foreground(accent))),
 		err:     notice,
 	}
@@ -89,7 +98,10 @@ func (m *loginModel) focus() tea.Cmd {
 	m.user.Blur()
 	m.pass.Blur()
 	m.code.Blur()
+	m.session.Blur()
 	switch m.step {
+	case stepSession:
+		return m.session.Focus()
 	case stepPassword:
 		return m.pass.Focus()
 	case stepCode:
@@ -144,7 +156,17 @@ func (m loginModel) Update(msg tea.Msg) (loginModel, tea.Cmd) {
 			return m, nil
 		}
 		switch msg.String() {
+		case "ctrl+b":
+			if m.step == stepUsername || m.step == stepPassword {
+				m.err, m.info = "", ""
+				m.session.Reset()
+				return m, m.setStep(stepSession)
+			}
 		case "esc":
+			if m.step == stepSession {
+				m.err = ""
+				return m, m.setStep(stepUsername)
+			}
 			if m.step != stepUsername {
 				m.err, m.info = "", ""
 				m.twoFA, m.verify, m.pending = nil, nil, nil
@@ -163,6 +185,8 @@ func (m loginModel) Update(msg tea.Msg) (loginModel, tea.Cmd) {
 		m.pass, cmd = m.pass.Update(msg)
 	case stepCode:
 		m.code, cmd = m.code.Update(msg)
+	case stepSession:
+		m.session, cmd = m.session.Update(msg)
 	}
 	return m, cmd
 }
@@ -185,6 +209,17 @@ func (m loginModel) submit() (loginModel, tea.Cmd) {
 			ctx, cancel := context.WithTimeout(context.Background(), loginTimeout)
 			defer cancel()
 			return loginResultMsg{client.Login(ctx, user, pass)}
+		})
+	case stepSession:
+		value := strings.TrimSpace(m.session.Value())
+		if value == "" {
+			return m, nil
+		}
+		client := m.client
+		return m, m.startBusy("Checking browser session…", func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), loginTimeout)
+			defer cancel()
+			return loginResultMsg{client.LoginBySessionID(ctx, value)}
 		})
 	case stepCode:
 		code := strings.TrimSpace(m.code.Value())
@@ -264,12 +299,21 @@ func (m loginModel) handleLoginResult(err error) (loginModel, tea.Cmd) {
 func (m loginModel) View() string {
 	logo := titleStyle.Render("instgo") + mutedStyle.Render("  ·  Instagram DMs in your terminal")
 	lines := []string{logo, ""}
-	lines = append(lines, m.user.View())
-	if m.step >= stepPassword {
-		lines = append(lines, m.pass.View())
-	}
-	if m.step == stepCode {
-		lines = append(lines, "", m.info, m.code.View())
+	switch m.step {
+	case stepSession:
+		lines = append(lines,
+			"Use the session from Firefox where you are logged in:",
+			mutedStyle.Render("instagram.com → F12 → Storage → Cookies → sessionid → copy Value"),
+			"",
+			m.session.View())
+	default:
+		lines = append(lines, m.user.View())
+		if m.step >= stepPassword {
+			lines = append(lines, m.pass.View())
+		}
+		if m.step == stepCode {
+			lines = append(lines, "", m.info, m.code.View())
+		}
 	}
 	lines = append(lines, "")
 	switch {
@@ -280,7 +324,11 @@ func (m loginModel) View() string {
 	default:
 		lines = append(lines, "")
 	}
-	lines = append(lines, "", mutedStyle.Render("enter continue · esc back · ctrl+c quit"))
+	hint := "enter continue · ctrl+b use Firefox session · esc back"
+	if m.step == stepSession || m.step == stepCode {
+		hint = "enter continue · esc back · ctrl+c quit"
+	}
+	lines = append(lines, "", mutedStyle.Render(hint))
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(accent).
