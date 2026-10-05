@@ -22,10 +22,10 @@ import (
 )
 
 const (
-	apiHost        = "i.instagram.com"
-	appID          = "567067343352427"
-	bloksVersionID = "ce555e5500576acd8e84a66018f54a05720f2dce29f0bb5a1f97f0c10d6fac48"
-	formType       = "application/x-www-form-urlencoded; charset=UTF-8"
+	apiHost  = "i.instagram.com"
+	caaHost  = "b.i.instagram.com"
+	appID    = "567067343352427"
+	formType = "application/x-www-form-urlencoded; charset=UTF-8"
 )
 
 var retryDelays = []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second}
@@ -35,18 +35,35 @@ type Client struct {
 	s        *Session
 	path     string
 	http     *http.Client
+	web      *http.Client
 	password string
 	csrf     string
 	clientIP string
+	aac      string
+
+	usdidCache   string
+	usdidExpires int64
 }
 
 func New(s *Session, path string) *Client {
-	transport := &http.Transport{
+	h2 := new(http.Protocols)
+	h2.SetHTTP2(true)
+	api := &http.Transport{
+		Proxy:           http.ProxyFromEnvironment,
+		Protocols:       h2,
+		TLSClientConfig: &tls.Config{CurvePreferences: []tls.CurveID{tls.X25519MLKEM768, tls.X25519, tls.CurveP256, tls.CurveP384}},
+	}
+	web := &http.Transport{
 		Proxy:           http.ProxyFromEnvironment,
 		TLSClientConfig: &tls.Config{NextProtos: []string{"http/1.1"}},
 		TLSNextProto:    map[string]func(string, *tls.Conn) http.RoundTripper{},
 	}
-	return &Client{s: s, path: path, http: &http.Client{Timeout: 30 * time.Second, Transport: transport}}
+	return &Client{
+		s:    s,
+		path: path,
+		http: &http.Client{Timeout: 30 * time.Second, Transport: api},
+		web:  &http.Client{Timeout: 30 * time.Second, Transport: web},
+	}
 }
 
 func (c *Client) LoggedIn() bool {
@@ -134,7 +151,9 @@ func IsLoginRequired(err error) bool {
 
 type request struct {
 	method  string
+	host    string
 	path    string
+	rawPath bool
 	query   url.Values
 	body    string
 	headers map[string]string
@@ -149,7 +168,7 @@ func (c *Client) postForm(ctx context.Context, endpoint string, form url.Values)
 }
 
 func (c *Client) postSigned(ctx context.Context, endpoint string, data map[string]any) ([]byte, error) {
-	raw, err := json.Marshal(data)
+	raw, err := compactJSON(data)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +196,14 @@ func (c *Client) do(ctx context.Context, r request) ([]byte, error) {
 }
 
 func (c *Client) send(ctx context.Context, r request) ([]byte, int, error) {
-	u := "https://" + apiHost + "/api/v1/" + strings.TrimPrefix(r.path, "/")
+	host := r.host
+	if host == "" {
+		host = apiHost
+	}
+	u := "https://" + host + "/api/v1/" + strings.TrimPrefix(r.path, "/")
+	if r.rawPath {
+		u = "https://" + host + r.path
+	}
 	if len(r.query) > 0 {
 		u += "?" + r.query.Encode()
 	}
@@ -240,7 +266,7 @@ func (c *Client) setHeaders(h http.Header) {
 		"X-IG-Bandwidth-TotalBytes-B": strconv.Itoa(5000000 + rand.IntN(85000001)),
 		"X-IG-Bandwidth-TotalTime-MS": strconv.Itoa(2000 + rand.IntN(7001)),
 		"X-IG-App-Startup-Country":    strings.ToUpper(s.Country),
-		"X-Bloks-Version-Id":          bloksVersionID,
+		"X-Bloks-Version-Id":          s.Device.BloksVersionID,
 		"X-IG-WWW-Claim":              "0",
 		"X-Bloks-Is-Layout-RTL":       "false",
 		"X-Bloks-Is-Panorama-Enabled": "true",
@@ -249,14 +275,18 @@ func (c *Client) setHeaders(h http.Header) {
 		"X-IG-Android-ID":             s.AndroidDeviceID,
 		"X-IG-Timezone-Offset":        strconv.Itoa(s.TimezoneOffset),
 		"X-IG-Connection-Type":        "WIFI",
-		"X-IG-Capabilities":           "3brTvx0=",
+		"X-IG-Capabilities":           "3brTv10=",
 		"X-IG-App-ID":                 appID,
 		"Priority":                    "u=3",
 		"User-Agent":                  s.userAgent(),
 		"Accept-Language":             accept,
 		"X-MID":                       s.Mid,
 		"Accept-Encoding":             "gzip, deflate",
-		"X-FB-HTTP-Engine":            "Liger",
+		"X-FB-HTTP-Engine":            "Tigon/MNS/TCP",
+		"X-Tigon-Is-Retry":            "False",
+		"X-Zero-Balance":              "INIT",
+		"X-Zero-State":                "unknown",
+		"Zero-HTTP-Network-Interface": "wifi",
 		"X-FB-Client-IP":              "True",
 		"X-FB-Server-Cluster":         "True",
 		"IG-INTENDED-USER-ID":         "0",
@@ -272,12 +302,26 @@ func (c *Client) setHeaders(h http.Header) {
 		set["IG-U-SHBTS"] = strconv.FormatInt(time.Now().Unix(), 10) + "," + s.UserID + "," + next + ":01f7ace11925d0388080078d0282b75b8059844855da27e23c90a362270fddfb3fae7e28"
 		set["IG-U-RUR"] = "RVA," + s.UserID + "," + next + ":01f7f627f9ae4ce2874b2e04463efdb184340968b1b006fa88cb4cc69a942a04201e544c"
 	}
+	if s.IgURur != "" {
+		set["IG-U-RUR"] = s.IgURur
+	}
+	if s.WWWClaim != "" {
+		set["X-IG-WWW-Claim"] = s.WWWClaim
+	}
+	if s.Authorization != "" {
+		set["Authorization"] = s.Authorization
+	}
+	if s.USDID.PrivateKey != "" {
+		if v, err := c.usdidHeader(); err == nil {
+			set["X-Meta-Usdid"] = v
+		}
+	}
 	for k, v := range set {
 		if v != "" {
 			h[k] = []string{v}
 		}
 	}
-	h["Authorization"] = []string{s.Authorization}
+	h["X-Zero-Eh"] = []string{""}
 	if cookie := cookieHeader(s.Cookies); cookie != "" {
 		h["Cookie"] = []string{cookie}
 	}

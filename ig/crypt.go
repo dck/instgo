@@ -27,10 +27,12 @@ func (c *Client) passwordKey(ctx context.Context) (int, *rsa.PublicKey, error) {
 	if err != nil {
 		return 0, nil, err
 	}
+	req.Header.Set("Accept-Encoding", "gzip,deflate")
 	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Connection", "Keep-Alive")
 	req.Header.Set("Accept-Language", "en-US")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/11.1.2 Safari/605.1.15")
-	resp, err := c.http.Do(req)
+	resp, err := c.web.Do(req)
 	if err != nil {
 		return 0, nil, err
 	}

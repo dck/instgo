@@ -43,6 +43,7 @@ type loginModel struct {
 	err     string
 	twoFA   *ig.TwoFactorRequired
 	verify  *ig.Challenge
+	pending *ig.CodeRequired
 	width   int
 	height  int
 }
@@ -134,7 +135,7 @@ func (m loginModel) Update(msg tea.Msg) (loginModel, tea.Cmd) {
 			return m, m.startBusy("Verified, logging in…", m.resumeCmd())
 		}
 		m.verify = msg.ch
-		m.twoFA = nil
+		m.twoFA, m.pending = nil, nil
 		m.info = "Instagram sent a security code to " + orDefault(msg.ch.Destination, "your email") + "."
 		m.code.Reset()
 		return m, m.setStep(stepCode)
@@ -146,7 +147,7 @@ func (m loginModel) Update(msg tea.Msg) (loginModel, tea.Cmd) {
 		case "esc":
 			if m.step != stepUsername {
 				m.err, m.info = "", ""
-				m.twoFA, m.verify = nil, nil
+				m.twoFA, m.verify, m.pending = nil, nil, nil
 				return m, m.setStep(m.step - 1)
 			}
 			return m, tea.Quit
@@ -190,10 +191,13 @@ func (m loginModel) submit() (loginModel, tea.Cmd) {
 		if code == "" {
 			return m, nil
 		}
-		client, twoFA, verify := m.client, m.twoFA, m.verify
+		client, twoFA, verify, pending := m.client, m.twoFA, m.verify, m.pending
 		return m, m.startBusy("Checking code…", func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), loginTimeout)
 			defer cancel()
+			if pending != nil {
+				return loginResultMsg{client.SubmitCode(ctx, pending, code)}
+			}
 			if twoFA != nil {
 				return loginResultMsg{client.TwoFactorLogin(ctx, twoFA, code)}
 			}
@@ -216,11 +220,20 @@ func (m loginModel) handleLoginResult(err error) (loginModel, tea.Cmd) {
 	m.busy = ""
 	var twoFA *ig.TwoFactorRequired
 	var challenge *ig.ChallengeRequired
+	var codeReq *ig.CodeRequired
 	switch {
 	case err == nil:
 		return m, func() tea.Msg { return loggedInMsg{} }
+	case errors.As(err, &codeReq):
+		m.pending, m.twoFA, m.verify = codeReq, nil, nil
+		m.info = "Instagram sent a security code to your email. Enter it below."
+		if codeReq.TwoFactor {
+			m.info = "Enter your two-factor code (authenticator app, SMS or backup code)."
+		}
+		m.code.Reset()
+		return m, m.setStep(stepCode)
 	case errors.As(err, &twoFA):
-		m.twoFA, m.verify = twoFA, nil
+		m.twoFA, m.verify, m.pending = twoFA, nil, nil
 		if twoFA.TOTP {
 			m.info = "Enter the code from your authenticator app."
 		} else {
@@ -243,7 +256,7 @@ func (m loginModel) handleLoginResult(err error) (loginModel, tea.Cmd) {
 	}
 	m.err = err.Error()
 	m.info = ""
-	m.twoFA, m.verify = nil, nil
+	m.twoFA, m.verify, m.pending = nil, nil, nil
 	m.pass.Reset()
 	return m, m.setStep(stepPassword)
 }

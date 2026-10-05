@@ -275,7 +275,7 @@ func (c *Client) webDo(ctx context.Context, ch *Challenge, target string, form u
 		h.Set("Cookie", cookie)
 	}
 	debugLog.Printf("→ web %s %s\n  request body: %s", method, req.URL.Path, redactBody(form.Encode()))
-	resp, err := c.http.Do(req)
+	resp, err := c.web.Do(req)
 	if err != nil {
 		debugLog.Printf("← web %s %s failed: %v", method, req.URL.Path, err)
 		return nil, err

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -34,15 +36,7 @@ func (c *Client) Login(ctx context.Context, username, password string) error {
 	c.password = password
 	c.mu.Unlock()
 	debugLog.Printf("login start user=%s device=%s uuid=%s", username, c.s.AndroidDeviceID, c.s.UUID)
-	_, err := c.postSigned(ctx, "launcher/sync/", map[string]any{
-		"id":                      c.s.UUID,
-		"server_config_retrieval": "1",
-	})
-	if rl := c.throttled(err); rl != nil {
-		err = rl
-	} else {
-		err = c.ResumeLogin(ctx)
-	}
+	err := c.caaLogin(ctx)
 	debugLog.Printf("login result: %v", err)
 	if saveErr := c.save(); saveErr != nil {
 		debugLog.Printf("save session: %v", saveErr)
@@ -168,42 +162,54 @@ func (c *Client) completeLogin(ctx context.Context, body []byte) error {
 
 func (c *Client) postLoginFlow(ctx context.Context) {
 	s := c.s
-	_, _ = c.postSigned(ctx, "feed/reels_tray/", map[string]any{
-		"supported_capabilities_new": []map[string]string{
-			{"value": "119.0,120.0,121.0,122.0,123.0,124.0,125.0,126.0,127.0,128.0,129.0,130.0,131.0,132.0,133.0,134.0,135.0,136.0,137.0,138.0,139.0,140.0,141.0,142.0", "name": "SUPPORTED_SDK_VERSIONS"},
-			{"value": "14", "name": "FACE_TRACKER_VERSION"},
-			{"value": "ETC2_COMPRESSION", "name": "COMPRESSION"},
-			{"value": "gyroscope_enabled", "name": "gyroscope"},
-		},
-		"reason":                "cold_start",
-		"timezone_offset":       strconv.Itoa(s.TimezoneOffset),
-		"tray_session_id":       s.TraySessionID,
-		"request_id":            s.RequestID,
-		"page_size":             50,
-		"_uuid":                 s.UUID,
-		"reel_tray_impressions": map[string]string{},
-	})
-	feed, _ := json.Marshal(map[string]any{
-		"has_camera_permission": "1",
-		"feed_view_info":        "[]",
-		"phone_id":              s.PhoneID,
-		"reason":                "cold_start_fetch",
-		"battery_level":         100,
-		"timezone_offset":       strconv.Itoa(s.TimezoneOffset),
-		"device_id":             s.UUID,
-		"request_id":            s.RequestID,
-		"_uuid":                 s.UUID,
-		"is_charging":           rand.IntN(2),
-		"is_dark_mode":          1,
-		"will_sound_on":         rand.IntN(2),
-		"session_id":            s.ClientSessionID,
-		"bloks_versioning_id":   bloksVersionID,
-		"is_pull_to_refresh":    "0",
-	})
+	tray := obj{
+		{"supported_capabilities_new", []obj{
+			{{"value", "119.0,120.0,121.0,122.0,123.0,124.0,125.0,126.0,127.0,128.0,129.0,130.0,131.0,132.0,133.0,134.0,135.0,136.0,137.0,138.0,139.0,140.0,141.0,142.0"}, {"name", "SUPPORTED_SDK_VERSIONS"}},
+			{{"value", "14"}, {"name", "FACE_TRACKER_VERSION"}},
+			{{"value", "ETC2_COMPRESSION"}, {"name", "COMPRESSION"}},
+			{{"value", "gyroscope_enabled"}, {"name", "gyroscope"}},
+		}},
+		{"reason", "cold_start"},
+		{"timezone_offset", strconv.Itoa(s.TimezoneOffset)},
+		{"tray_session_id", s.TraySessionID},
+		{"request_id", s.RequestID},
+		{"page_size", 50},
+		{"_uuid", s.UUID},
+		{"reel_tray_impressions", obj{}},
+	}
+	_, _ = c.do(ctx, request{method: http.MethodPost, path: "feed/reels_tray/", body: "signed_body=SIGNATURE." + url.QueryEscape(dumps(tray))})
+	now := strconv.FormatInt(time.Now().UnixMilli(), 10)
+	feed := obj{
+		{"app_start_time", now},
+		{"has_camera_permission", "1"},
+		{"feed_view_info", "[]"},
+		{"client_recorded_request_time_ms", now},
+		{"client_seen_store_media_list", ""},
+		{"client_view_state_media_list", "[]"},
+		{"device_timezone_name", timezoneName(s.TimezoneOffset)},
+		{"feed_reshare_info", ""},
+		{"phone_id", s.PhoneID},
+		{"reason", []string{"cold_start_fetch"}},
+		{"battery_level", 100},
+		{"timezone_offset", strconv.Itoa(s.TimezoneOffset)},
+		{"device_id", s.UUID},
+		{"include_attribution_ui_data", "true"},
+		{"push_disabled", "true"},
+		{"request_id", s.RequestID},
+		{"request_build_time", now},
+		{"_uuid", s.UUID},
+		{"is_charging", rand.IntN(2)},
+		{"is_dark_mode", 1},
+		{"will_sound_on", rand.IntN(2)},
+		{"session_id", s.ClientSessionID},
+		{"session_level_signals", sessionLevelSignals},
+		{"bloks_versioning_id", s.Device.BloksVersionID},
+		{"is_pull_to_refresh", "0"},
+	}
 	_, _ = c.do(ctx, request{
-		method: "POST",
+		method: http.MethodPost,
 		path:   "feed/timeline/",
-		body:   string(feed),
+		body:   pyDumps(feed),
 		headers: map[string]string{
 			"X-Ads-Opt-Out":       "0",
 			"X-DEVICE-ID":         s.UUID,
@@ -211,6 +217,24 @@ func (c *Client) postLoginFlow(ctx context.Context) {
 			"X-CM-Latency":        strconv.Itoa(1 + rand.IntN(5)),
 		},
 	})
+}
+
+const sessionLevelSignals = `{"time_since_current_surface_session_start":0,"time_since_fg_session_start":0,"time_since_last_background":0,"num_ad_seen_current_surface_current_session":0,"app_entry":"normal","last_surfaces_visited_current_session":[],"video_play_count":0,"video_pause_count":0,"video_dwell_time_sum":0,"video_dwell_time_max":0,"video_view_count":0,"video_intentional_audio_on":0,"video_intentional_audio_off":0,"video_audio_on_count":0,"feed_to_reels_iv_entry":0,"time_since_last_ad_click":-1,"time_since_last_ad_like":-1,"time_since_last_organic_like":-1,"time_since_last_like":-1,"time_since_last_organic_business_profile_visit":-1,"time_since_last_ad_imp":-1,"time_since_last_search":-1,"time_since_last_organic_engagement_event":-1,"time_since_last_ad_profile_visit":-1,"time_since_last_ad_cta":-1,"time_since_last_ad_caption_more_click":-1,"time_since_last_ad_comment_button":-1,"time_since_last_ad_share":-1,"time_since_last_ad_media_tap":-1,"time_since_last_ad_gesture":-1,"time_since_last_search_result_click":-1,"time_since_last_serp_click":-1,"time_since_last_organic_share":-1,"time_since_last_organic_comment":-1,"time_since_last_organic_caption_click":-1,"time_since_last_organic_media_tap":-1,"time_since_last_organic_gesture":-1,"num_search_clicks_current_session":0}`
+
+func timezoneName(offset int) string {
+	sign := "+"
+	if offset < 0 {
+		sign, offset = "-", -offset
+	}
+	return fmt.Sprintf("GMT%s%02d:%02d", sign, offset/3600, offset%3600/60)
+}
+
+func pyDumps(o obj) string {
+	parts := make([]string, len(o))
+	for i, p := range o {
+		parts[i] = dumps(p.k) + ": " + dumps(p.v)
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
 }
 
 func jazoest(s string) string {

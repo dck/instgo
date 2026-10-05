@@ -24,19 +24,28 @@ type Device struct {
 	Model          string `json:"model"`
 	CPU            string `json:"cpu"`
 	VersionCode    string `json:"version_code"`
+	BloksVersionID string `json:"bloks_versioning_id"`
 }
 
 var defaultDevice = Device{
-	AppVersion:     "269.0.0.18.75",
-	AndroidVersion: 26,
-	AndroidRelease: "8.0.0",
+	AppVersion:     "449.0.0.52.84",
+	AndroidVersion: 34,
+	AndroidRelease: "14",
 	DPI:            "480dpi",
-	Resolution:     "1080x1920",
-	Manufacturer:   "OnePlus",
-	Device:         "devitron",
-	Model:          "6T Dev",
-	CPU:            "qcom",
-	VersionCode:    "314665256",
+	Resolution:     "1344x2992",
+	Manufacturer:   "Google/google",
+	Device:         "husky",
+	Model:          "Pixel 8 Pro",
+	CPU:            "husky",
+	VersionCode:    "1079242191",
+	BloksVersionID: "799db3e387d7a21a19c72918b8698b6cd28a1516ade363792c100ed45a0f9f0b",
+}
+
+type USDID struct {
+	ID         string `json:"usdid"`
+	KID        string `json:"kid"`
+	PrivateKey string `json:"private_key"`
+	Registered bool   `json:"registered"`
 }
 
 type Session struct {
@@ -59,6 +68,9 @@ type Session struct {
 	TimezoneOffset  int               `json:"timezone_offset"`
 	PasswordKeyID   int               `json:"password_key_id"`
 	PasswordPubKey  string            `json:"password_pub_key"`
+	IgURur          string            `json:"ig_u_rur"`
+	WWWClaim        string            `json:"ig_www_claim"`
+	USDID           USDID             `json:"usdid"`
 }
 
 func NewSession() *Session {
@@ -105,6 +117,11 @@ func LoadSession(path string) (*Session, error) {
 	}
 	if s.Cookies == nil {
 		s.Cookies = map[string]string{}
+	}
+	if !s.LoggedIn() && s.Device != defaultDevice {
+		s.Device = defaultDevice
+		s.Cookies = map[string]string{}
+		s.Mid = ""
 	}
 	return s, nil
 }

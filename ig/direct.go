@@ -17,11 +17,17 @@ type Inbox struct {
 
 func (c *Client) Inbox(ctx context.Context, cursor string) (*Inbox, error) {
 	q := url.Values{
-		"visual_message_return_type": {"unseen"},
-		"thread_message_limit":       {"10"},
-		"persistentBadging":          {"true"},
-		"limit":                      {"20"},
-		"is_prefetching":             {"false"},
+		"eb_device_id":                {"0"},
+		"igd_request_log_tracking_id": {newUUID()},
+		"visual_message_return_type":  {"unseen"},
+		"thread_message_limit":        {"10"},
+		"persistentBadging":           {"true"},
+		"limit":                       {"20"},
+		"is_prefetching":              {"false"},
+		"fetch_reason":                {"initial_snapshot"},
+		"include_old_mrs":             {"false"},
+		"no_pending_badge":            {"true"},
+		"push_disabled":               {"true"},
 	}
 	if cursor != "" {
 		q.Set("cursor", cursor)

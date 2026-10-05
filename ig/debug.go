@@ -15,7 +15,12 @@ const debugBodyLimit = 4096
 
 var debugLog = log.New(io.Discard, "", log.LstdFlags|log.Lmicroseconds)
 
-var sensitiveJSON = regexp.MustCompile(`("(?:enc_password|password|verification_code|security_code|_csrftoken|text|link_text)":")(?:[^"\\]|\\.)*"`)
+var sensitiveJSON = regexp.MustCompile(`("(?:enc_password|password|verification_code|security_code|_csrftoken|text|link_text|code)":")(?:[^"\\]|\\.)*"`)
+
+var (
+	bearerToken   = regexp.MustCompile(`IGT:2:[A-Za-z0-9+/=_-]+`)
+	sessionCookie = regexp.MustCompile(`(sessionid=)[^;\\"\s]+`)
+)
 
 var sensitiveForm = map[string]bool{
 	"security_code": true, "verification_code": true, "text": true, "link_text": true,
@@ -35,7 +40,7 @@ func Debugf(format string, args ...any) {
 }
 
 func verbosePath(path string) bool {
-	for _, p := range []string{"accounts/", "challenge/", "launcher/", "qe/"} {
+	for _, p := range []string{"accounts/", "challenge/", "launcher/", "qe/", "bloks/", "attestation/", "graphql_www"} {
 		if strings.Contains(path, p) {
 			return true
 		}
@@ -49,14 +54,25 @@ func redactBody(body string) string {
 			body = "signed_body=SIGNATURE." + decoded
 		}
 	} else if form, err := url.ParseQuery(body); err == nil && len(form) > 0 && !strings.HasPrefix(body, "{") {
+		keys := make([]string, 0, len(form))
 		for k := range form {
-			if sensitiveForm[k] {
-				form.Set(k, "[redacted]")
-			}
+			keys = append(keys, k)
 		}
-		body = form.Encode()
+		sort.Strings(keys)
+		parts := make([]string, 0, len(keys))
+		for _, k := range keys {
+			v := form.Get(k)
+			if sensitiveForm[k] {
+				v = "[redacted]"
+			}
+			parts = append(parts, k+"="+v)
+		}
+		body = strings.Join(parts, "&")
 	}
-	return truncate(sensitiveJSON.ReplaceAllString(body, `${1}[redacted]"`))
+	body = sensitiveJSON.ReplaceAllString(body, `${1}[redacted]"`)
+	body = bearerToken.ReplaceAllString(body, "IGT:2:[redacted]")
+	body = sessionCookie.ReplaceAllString(body, "${1}[redacted]")
+	return truncate(body)
 }
 
 func formatHeaders(h http.Header) string {
