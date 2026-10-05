@@ -51,7 +51,6 @@ func newLogin(client *ig.Client, notice string) loginModel {
 	user := textinput.New()
 	user.Prompt = "Username  "
 	user.Placeholder = "your.instagram.handle"
-	user.SetValue(client.Username())
 	user.SetWidth(32)
 
 	pass := textinput.New()
