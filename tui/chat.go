@@ -86,6 +86,7 @@ type chatModel struct {
 	focus     focusArea
 	filtering bool
 	filter    textinput.Model
+	disguised bool
 
 	input   textinput.Model
 	vp      viewport.Model
@@ -370,6 +371,10 @@ func (m *chatModel) sendNext() tea.Cmd {
 
 func (m *chatModel) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	key := msg.String()
+	if key == "ctrl+x" {
+		m.toggleDisguise()
+		return nil
+	}
 	if m.filtering {
 		switch key {
 		case "esc":

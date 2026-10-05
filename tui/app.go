@@ -96,5 +96,8 @@ func (a App) View() tea.View {
 	}
 	v.AltScreen = true
 	v.WindowTitle = "instgo"
+	if a.screen == screenChat && a.chat.disguised {
+		v.WindowTitle = "claude"
+	}
 	return v
 }

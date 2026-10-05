@@ -91,7 +91,7 @@ func pane(focused bool, w, h int) lipgloss.Style {
 func (m *chatModel) renderList(h int) string {
 	w := m.listWidth()
 	inner, innerH := w-2, h-2
-	header := titleStyle.Render("Chats")
+	header := titleStyle.Render(m.mask("Chats"))
 	if m.inbox.loading {
 		header += " " + m.spinner.View()
 	}
@@ -104,7 +104,7 @@ func (m *chatModel) renderList(h int) string {
 	case len(vis) == 0 && m.inbox.loading:
 		lines = append(lines, mutedStyle.Render("Loading…"))
 	case len(vis) == 0:
-		lines = append(lines, mutedStyle.Render("No conversations"))
+		lines = append(lines, mutedStyle.Render(m.mask("No conversations")))
 	}
 	end := min(len(vis), m.listTop+m.listRows())
 	for i := m.listTop; i < end; i++ {
@@ -138,7 +138,7 @@ func (m *chatModel) renderRow(tv *threadView, selected bool, width int) []string
 		when = shortTime(tv.thread.LastActivityAt.Time())
 	}
 	nameW := max(1, width-3-lipgloss.Width(when)-1)
-	name := nameStyle.Render(ansi.Truncate(threadName(tv.thread, m.me), nameW, "…"))
+	name := nameStyle.Render(ansi.Truncate(m.mask(threadName(tv.thread, m.me)), nameW, "…"))
 	gap := max(1, width-1-2-lipgloss.Width(name)-lipgloss.Width(when))
 	line1 := bar + dot + name + strings.Repeat(" ", gap) + mutedStyle.Render(when)
 
@@ -153,7 +153,7 @@ func (m *chatModel) renderRow(tv *threadView, selected bool, width int) []string
 	if n := len(tv.pending); n > 0 {
 		preview = "You: " + oneLine(tv.pending[n-1].text)
 	}
-	line2 := bar + "  " + mutedStyle.Render(ansi.Truncate(preview, max(1, width-3), "…"))
+	line2 := bar + "  " + mutedStyle.Render(ansi.Truncate(m.mask(preview), max(1, width-3), "…"))
 	return []string{line1, line2}
 }
 
@@ -163,12 +163,12 @@ func (m *chatModel) renderChat(h int) string {
 	focused := m.focus == focusInput && !m.filtering
 	tv := m.open()
 	if tv == nil {
-		msg := mutedStyle.Render("Select a conversation")
+		msg := mutedStyle.Render(m.mask("Select a conversation"))
 		return pane(focused, w+2, h).Render(lipgloss.Place(inner, innerH, lipgloss.Center, lipgloss.Center, msg))
 	}
-	title := lipgloss.NewStyle().Bold(true).Render(threadName(tv.thread, m.me))
+	title := lipgloss.NewStyle().Bold(true).Render(m.mask(threadName(tv.thread, m.me)))
 	if handles := usernames(tv.thread); handles != "" {
-		title += mutedStyle.Render("  " + handles)
+		title += mutedStyle.Render("  " + m.mask(handles))
 	}
 	if tv.loading || tv.loadingOlder {
 		title += " " + m.spinner.View()
@@ -176,17 +176,17 @@ func (m *chatModel) renderChat(h int) string {
 	divider := faintStyle.Render(strings.Repeat("─", inner))
 	input := m.input.View()
 	if !focused {
-		input = mutedStyle.Render("› press enter to write a message")
+		input = mutedStyle.Render(m.mask("› press enter to write a message"))
 	}
 	lines := []string{ansi.Truncate(title, inner, "…"), divider, m.vp.View(), divider, input}
 	return pane(focused, w+2, h).Render(fit(strings.Split(strings.Join(lines, "\n"), "\n"), innerH))
 }
 
 func (m *chatModel) renderStatus() string {
-	left := okStyle.Render("●") + " @" + m.client.Username()
+	left := okStyle.Render("●") + " " + m.mask("@"+m.client.Username())
 	switch {
 	case m.status != "" && !m.statusOK:
-		left += "  " + errorStyle.Render(oneLine(m.status))
+		left += "  " + errorStyle.Render(m.mask(oneLine(m.status)))
 	case len(m.queue) > 0:
 		left += "  " + mutedStyle.Render(fmt.Sprintf("%s sending %d…", m.spinner.View(), len(m.queue)))
 	case !m.synced.IsZero():
@@ -201,7 +201,7 @@ func (m *chatModel) renderStatus() string {
 	default:
 		hints = "j/k move · enter chat · / filter · r refresh · q quit"
 	}
-	hints = mutedStyle.Render(hints)
+	hints = mutedStyle.Render(m.mask(hints))
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(hints)
 	if gap < 1 {
 		return ansi.Truncate(left, m.width, "…")
@@ -220,9 +220,9 @@ func (m *chatModel) renderMessages(tv *threadView, width int) string {
 	var out []string
 	switch {
 	case tv.loadingOlder:
-		out = append(out, center(mutedStyle.Render("loading older messages…")))
+		out = append(out, center(mutedStyle.Render(m.mask("loading older messages…"))))
 	case tv.loaded && !tv.hasOlder:
-		out = append(out, center(faintStyle.Render("beginning of conversation")))
+		out = append(out, center(faintStyle.Render(m.mask("beginning of conversation"))))
 	}
 	var lastSender, lastDay string
 	var lastAt time.Time
@@ -233,9 +233,9 @@ func (m *chatModel) renderMessages(tv *threadView, width int) string {
 			lastDay, lastSender = day, ""
 		}
 		if sender != lastSender || at.Sub(lastAt) > groupGap {
-			name := themStyle.Render(orDefault(names[sender], "Unknown"))
+			name := themStyle.Render(m.mask(orDefault(names[sender], "Unknown")))
 			if sender == m.me {
-				name = meStyle.Render("You")
+				name = meStyle.Render(m.mask("You"))
 			}
 			out = append(out, "", name+"  "+mutedStyle.Render(at.Format("15:04")))
 		}
@@ -245,24 +245,24 @@ func (m *chatModel) renderMessages(tv *threadView, width int) string {
 		at := it.Timestamp.Time().Local()
 		if it.ItemType == "action_log" {
 			header("", at)
-			out = append(out, center(mutedStyle.Italic(true).Render(itemText(it))))
+			out = append(out, center(mutedStyle.Italic(true).Render(m.mask(itemText(it)))))
 			lastSender = ""
 			continue
 		}
 		header(string(it.UserID), at)
 		if it.RepliedTo != nil {
-			quote := "↪ " + oneLine(itemText(*it.RepliedTo))
+			quote := "↪ " + m.mask(oneLine(itemText(*it.RepliedTo)))
 			out = append(out, body.Render(faintStyle.Render(ansi.Truncate(quote, max(1, width-2), "…"))))
 		}
-		out = append(out, body.Render(itemText(it)))
+		out = append(out, body.Render(m.mask(itemText(it))))
 	}
 	for _, p := range tv.pending {
 		header(m.me, p.at)
 		state := mutedStyle.Render("  sending…")
 		if p.failed {
-			state = errorStyle.Render("  ✗ not sent · ctrl+r to retry")
+			state = errorStyle.Render("  ✗ " + m.mask("not sent · ctrl+r to retry"))
 		}
-		out = append(out, body.Render(p.text+state))
+		out = append(out, body.Render(m.mask(p.text)+state))
 	}
 	return strings.Join(out, "\n")
 }
