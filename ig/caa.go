@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -184,6 +186,7 @@ func (c *Client) caaLogin(ctx context.Context) error {
 		}
 	}
 	if c.aac == "" || nonce == "" {
+		c.dumpResponse("preflight", res)
 		return errors.New("instagram did not return the login preflight data (see debug.log)")
 	}
 
@@ -346,6 +349,7 @@ func (c *Client) handleLoginResult(ctx context.Context, res map[string]any) erro
 			return c.ResumeLogin(ctx)
 		}
 	}
+	c.dumpResponse("login", res)
 	if len(markers) > 0 {
 		return fmt.Errorf("login was not accepted (%s)", strings.Join(markers, ", "))
 	}
@@ -356,6 +360,7 @@ func (c *Client) startProfileCode(ctx context.Context, res map[string]any) error
 	s := c.s
 	entry := bloksContextValue(res, ap2svEntrypoint, "context_data")
 	if entry == "" {
+		c.dumpResponse("login", res)
 		return errors.New("verification step is missing its context (see debug.log)")
 	}
 	entryRes, err := c.bloksAsync(ctx, caaHost, ap2svEntrypoint, obj{
@@ -380,6 +385,7 @@ func (c *Client) startProfileCode(ctx context.Context, res map[string]any) error
 	}
 	codeCtx := bloksContextValue(entryRes, ap2svCodeEntry, "context_data")
 	if codeCtx == "" {
+		c.dumpResponse("code-entrypoint", entryRes)
 		return errors.New("verification code screen is missing its context (see debug.log)")
 	}
 	codeRes, err := c.bloksApp(ctx, caaHost, ap2svCodeEntry, obj{
@@ -397,6 +403,7 @@ func (c *Client) startProfileCode(ctx context.Context, res map[string]any) error
 	}
 	submit := bloksContextValue(codeRes, ap2svCodeEntrySend, "context_data")
 	if submit == "" {
+		c.dumpResponse("code-entry", codeRes)
 		return errors.New("verification submit step is missing its context (see debug.log)")
 	}
 	return &CodeRequired{submitContext: submit}
@@ -431,6 +438,7 @@ func (c *Client) SubmitCode(ctx context.Context, cr *CodeRequired, code string) 
 	}
 	resp, ok := c.applyLogin(res)
 	if !ok {
+		c.dumpResponse("code-submit", res)
 		return ErrWrongCode
 	}
 	return c.finishLogin(ctx, resp)
@@ -537,4 +545,17 @@ func (c *Client) finishLogin(ctx context.Context, resp map[string]any) error {
 		return err
 	}
 	return c.completeLogin(ctx, raw)
+}
+
+func (c *Client) dumpResponse(step string, res map[string]any) {
+	raw, err := json.MarshalIndent(res, "", " ")
+	if err != nil {
+		return
+	}
+	path := filepath.Join(filepath.Dir(c.path), "debug-"+step+".json")
+	if err := os.WriteFile(path, []byte(redactSecrets(string(raw))), 0o600); err != nil {
+		debugLog.Printf("dump %s response: %v", step, err)
+		return
+	}
+	debugLog.Printf("full %s response saved to %s", step, path)
 }

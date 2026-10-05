@@ -238,7 +238,7 @@ func bloksAAC(result map[string]any) string {
 		}
 		if lispy, ok := data["initial_lispy"].(string); ok {
 			if q := strings.Index(lispy, `"`); q >= 0 {
-				if v, _, ok := jsonStringAt(lispy, q); ok {
+				if v, _, ok := jsonStringAt(lispy, q); ok && v != "" {
 					return v
 				}
 			}

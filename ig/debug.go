@@ -69,10 +69,13 @@ func redactBody(body string) string {
 		}
 		body = strings.Join(parts, "&")
 	}
-	body = sensitiveJSON.ReplaceAllString(body, `${1}[redacted]"`)
-	body = bearerToken.ReplaceAllString(body, "IGT:2:[redacted]")
-	body = sessionCookie.ReplaceAllString(body, "${1}[redacted]")
-	return truncate(body)
+	return truncate(redactSecrets(body))
+}
+
+func redactSecrets(s string) string {
+	s = sensitiveJSON.ReplaceAllString(s, `${1}[redacted]"`)
+	s = bearerToken.ReplaceAllString(s, "IGT:2:[redacted]")
+	return sessionCookie.ReplaceAllString(s, "${1}[redacted]")
 }
 
 func formatHeaders(h http.Header) string {
