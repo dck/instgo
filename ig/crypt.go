@@ -18,6 +18,11 @@ import (
 )
 
 func (c *Client) passwordKey(ctx context.Context) (int, *rsa.PublicKey, error) {
+	if c.s.PasswordPubKey != "" {
+		if key, err := parsePublicKey(c.s.PasswordPubKey); err == nil {
+			return c.s.PasswordKeyID, key, nil
+		}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+apiHost+"/api/v1/qe/sync/", nil)
 	if err != nil {
 		return 0, nil, err
@@ -33,12 +38,14 @@ func (c *Client) passwordKey(ctx context.Context) (int, *rsa.PublicKey, error) {
 	debugLog.Printf("← %d GET /api/v1/qe/sync/ (password key, %s), key id header %q", resp.StatusCode, resp.Proto, resp.Header.Get("ig-set-password-encryption-key-id"))
 	id, err := strconv.Atoi(resp.Header.Get("ig-set-password-encryption-key-id"))
 	if err != nil {
-		return 0, nil, fmt.Errorf("password key id missing (HTTP %d)", resp.StatusCode)
+		return 0, nil, fmt.Errorf("instagram did not return the password encryption key (HTTP %d), likely rate-limited", resp.StatusCode)
 	}
-	key, err := parsePublicKey(resp.Header.Get("ig-set-password-encryption-pub-key"))
+	pub := resp.Header.Get("ig-set-password-encryption-pub-key")
+	key, err := parsePublicKey(pub)
 	if err != nil {
 		return 0, nil, err
 	}
+	c.s.PasswordKeyID, c.s.PasswordPubKey = id, pub
 	return id, key, nil
 }
 

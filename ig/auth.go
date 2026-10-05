@@ -34,11 +34,15 @@ func (c *Client) Login(ctx context.Context, username, password string) error {
 	c.password = password
 	c.mu.Unlock()
 	debugLog.Printf("login start user=%s device=%s uuid=%s", username, c.s.AndroidDeviceID, c.s.UUID)
-	_, _ = c.postSigned(ctx, "launcher/sync/", map[string]any{
+	_, err := c.postSigned(ctx, "launcher/sync/", map[string]any{
 		"id":                      c.s.UUID,
 		"server_config_retrieval": "1",
 	})
-	err := c.ResumeLogin(ctx)
+	if rl := c.throttled(err); rl != nil {
+		err = rl
+	} else {
+		err = c.ResumeLogin(ctx)
+	}
 	debugLog.Printf("login result: %v", err)
 	if saveErr := c.save(); saveErr != nil {
 		debugLog.Printf("save session: %v", saveErr)
@@ -69,6 +73,9 @@ func (c *Client) ResumeLogin(ctx context.Context) error {
 		"login_attempt_count": "0",
 	})
 	if err != nil {
+		if rl := c.throttled(err); rl != nil {
+			return rl
+		}
 		return loginError(err)
 	}
 	return c.completeLogin(ctx, body)

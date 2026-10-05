@@ -37,6 +37,7 @@ type Client struct {
 	http     *http.Client
 	password string
 	csrf     string
+	clientIP string
 }
 
 func New(s *Session, path string) *Client {
@@ -100,6 +101,26 @@ func (e *APIError) Error() string {
 		msg = http.StatusText(e.StatusCode)
 	}
 	return fmt.Sprintf("instagram: %d %s", e.StatusCode, msg)
+}
+
+type RateLimitedError struct {
+	IP string
+}
+
+func (e *RateLimitedError) Error() string {
+	ip := ""
+	if e.IP != "" {
+		ip = " (IP " + e.IP + ")"
+	}
+	return "Instagram is rate-limiting this network" + ip + ". Wait a few minutes, then retry."
+}
+
+func (c *Client) throttled(err error) error {
+	var e *APIError
+	if errors.As(err, &e) && (e.StatusCode == http.StatusTooManyRequests || strings.Contains(e.Message, "Please wait a few minutes")) {
+		return &RateLimitedError{IP: c.clientIP}
+	}
+	return nil
 }
 
 func IsLoginRequired(err error) bool {
@@ -187,6 +208,9 @@ func (c *Client) send(ctx context.Context, r request) ([]byte, int, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	c.absorb(resp)
+	if ip := resp.Header.Get("X-Fb-Client-Ip-Forwarded"); ip != "" {
+		c.clientIP = ip
+	}
 	data, err := readBody(resp)
 	debugLog.Printf("← %d %s %s in %s (%s)", resp.StatusCode, r.method, req.URL.Path, time.Since(start).Round(time.Millisecond), resp.Proto)
 	if verbose || resp.StatusCode >= 400 {
@@ -266,6 +290,11 @@ func (c *Client) absorb(resp *http.Response) {
 			continue
 		}
 		s.Cookies[ck.Name] = ck.Value
+	}
+	if id, err := strconv.Atoi(resp.Header.Get("ig-set-password-encryption-key-id")); err == nil {
+		if pub := resp.Header.Get("ig-set-password-encryption-pub-key"); pub != "" {
+			s.PasswordKeyID, s.PasswordPubKey = id, pub
+		}
 	}
 	if mid := resp.Header.Get("ig-set-x-mid"); mid != "" {
 		s.Mid = mid

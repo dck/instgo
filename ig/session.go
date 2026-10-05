@@ -57,6 +57,8 @@ type Session struct {
 	Country         string            `json:"country"`
 	CountryCode     int               `json:"country_code"`
 	TimezoneOffset  int               `json:"timezone_offset"`
+	PasswordKeyID   int               `json:"password_key_id"`
+	PasswordPubKey  string            `json:"password_pub_key"`
 }
 
 func NewSession() *Session {
