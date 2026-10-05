@@ -42,8 +42,9 @@ type Client struct {
 
 func New(s *Session, path string) *Client {
 	transport := &http.Transport{
-		Proxy:        http.ProxyFromEnvironment,
-		TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{},
+		Proxy:           http.ProxyFromEnvironment,
+		TLSClientConfig: &tls.Config{NextProtos: []string{"http/1.1"}},
+		TLSNextProto:    map[string]func(string, *tls.Conn) http.RoundTripper{},
 	}
 	return &Client{s: s, path: path, http: &http.Client{Timeout: 30 * time.Second, Transport: transport}}
 }
