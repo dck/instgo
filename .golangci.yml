@@ -1,0 +1,6 @@
+version: "2"
+linters:
+  exclusions:
+    rules:
+      - path: ig/(crypt|ig_test)\.go
+        text: "SA1019: crypto/rsa\\.(En|De)cryptPKCS1v15"
