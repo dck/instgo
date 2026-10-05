@@ -274,8 +274,10 @@ func (c *Client) webDo(ctx context.Context, ch *Challenge, target string, form u
 	if cookie := cookieHeader(ch.webCookies); cookie != "" {
 		h.Set("Cookie", cookie)
 	}
+	debugLog.Printf("→ web %s %s\n  request body: %s", method, req.URL.Path, redactBody(form.Encode()))
 	resp, err := c.http.Do(req)
 	if err != nil {
+		debugLog.Printf("← web %s %s failed: %v", method, req.URL.Path, err)
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -288,6 +290,7 @@ func (c *Client) webDo(ctx context.Context, ch *Challenge, target string, form u
 	if err != nil {
 		return nil, err
 	}
+	debugLog.Printf("← web %d %s %s\n  response headers:\n%s  response body: %s", resp.StatusCode, method, req.URL.Path, formatHeaders(resp.Header), redactBody(string(data)))
 	if resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests {
 		return nil, &APIError{StatusCode: resp.StatusCode, Body: data}
 	}

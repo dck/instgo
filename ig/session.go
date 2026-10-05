@@ -60,7 +60,6 @@ type Session struct {
 }
 
 func NewSession() *Session {
-	_, offset := time.Now().Zone()
 	return &Session{
 		Cookies:         map[string]string{},
 		PhoneID:         newUUID(),
@@ -74,7 +73,7 @@ func NewSession() *Session {
 		Locale:          "en_US",
 		Country:         "US",
 		CountryCode:     1,
-		TimezoneOffset:  offset,
+		TimezoneOffset:  -14400,
 	}
 }
 

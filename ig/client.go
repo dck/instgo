@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"compress/zlib"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -39,7 +40,11 @@ type Client struct {
 }
 
 func New(s *Session, path string) *Client {
-	return &Client{s: s, path: path, http: &http.Client{Timeout: 30 * time.Second}}
+	transport := &http.Transport{
+		Proxy:        http.ProxyFromEnvironment,
+		TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{},
+	}
+	return &Client{s: s, path: path, http: &http.Client{Timeout: 30 * time.Second, Transport: transport}}
 }
 
 func (c *Client) LoggedIn() bool {
@@ -137,8 +142,7 @@ func (c *Client) do(ctx context.Context, r request) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		retryable := status == http.StatusTooManyRequests || status >= 500
-		if retryable && attempt < len(retryDelays) {
+		if status >= 500 && attempt < len(retryDelays) {
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -165,18 +169,29 @@ func (c *Client) send(ctx context.Context, r request) ([]byte, int, error) {
 	}
 	c.setHeaders(req.Header)
 	if r.method == http.MethodPost {
-		req.Header.Set("Content-Type", formType)
+		req.Header["Content-Type"] = []string{formType}
 	}
 	for k, v := range r.headers {
-		req.Header.Set(k, v)
+		req.Header[k] = []string{v}
 	}
+	verbose := verbosePath(r.path)
+	debugLog.Printf("→ %s %s", r.method, req.URL.Path)
+	if verbose {
+		debugLog.Printf("  request headers:\n%s  request body: %s", formatHeaders(req.Header), redactBody(r.body))
+	}
+	start := time.Now()
 	resp, err := c.http.Do(req)
 	if err != nil {
+		debugLog.Printf("← %s %s failed after %s: %v", r.method, req.URL.Path, time.Since(start).Round(time.Millisecond), err)
 		return nil, 0, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	c.absorb(resp)
 	data, err := readBody(resp)
+	debugLog.Printf("← %d %s %s in %s (%s)", resp.StatusCode, r.method, req.URL.Path, time.Since(start).Round(time.Millisecond), resp.Proto)
+	if verbose || resp.StatusCode >= 400 {
+		debugLog.Printf("  response headers:\n%s  response body: %s", formatHeaders(resp.Header), redactBody(string(data)))
+	}
 	if err != nil {
 		return nil, resp.StatusCode, err
 	}
@@ -190,6 +205,7 @@ func (c *Client) setHeaders(h http.Header) {
 		accept = lang + ", en-US"
 	}
 	set := map[string]string{
+		"Accept":                      "*/*",
 		"X-IG-App-Locale":             s.Locale,
 		"X-IG-Device-Locale":          s.Locale,
 		"X-IG-Mapped-Locale":          s.Locale,
@@ -231,16 +247,14 @@ func (c *Client) setHeaders(h http.Header) {
 		set["IG-U-SHBTS"] = strconv.FormatInt(time.Now().Unix(), 10) + "," + s.UserID + "," + next + ":01f7ace11925d0388080078d0282b75b8059844855da27e23c90a362270fddfb3fae7e28"
 		set["IG-U-RUR"] = "RVA," + s.UserID + "," + next + ":01f7f627f9ae4ce2874b2e04463efdb184340968b1b006fa88cb4cc69a942a04201e544c"
 	}
-	if s.Authorization != "" {
-		set["Authorization"] = s.Authorization
-	}
 	for k, v := range set {
 		if v != "" {
-			h.Set(k, v)
+			h[k] = []string{v}
 		}
 	}
+	h["Authorization"] = []string{s.Authorization}
 	if cookie := cookieHeader(s.Cookies); cookie != "" {
-		h.Set("Cookie", cookie)
+		h["Cookie"] = []string{cookie}
 	}
 }
 

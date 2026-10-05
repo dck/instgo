@@ -33,11 +33,17 @@ func (c *Client) Login(ctx context.Context, username, password string) error {
 	c.s.Username = username
 	c.password = password
 	c.mu.Unlock()
+	debugLog.Printf("login start user=%s device=%s uuid=%s", username, c.s.AndroidDeviceID, c.s.UUID)
 	_, _ = c.postSigned(ctx, "launcher/sync/", map[string]any{
 		"id":                      c.s.UUID,
 		"server_config_retrieval": "1",
 	})
-	return c.ResumeLogin(ctx)
+	err := c.ResumeLogin(ctx)
+	debugLog.Printf("login result: %v", err)
+	if saveErr := c.save(); saveErr != nil {
+		debugLog.Printf("save session: %v", saveErr)
+	}
+	return err
 }
 
 func (c *Client) ResumeLogin(ctx context.Context) error {

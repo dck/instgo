@@ -30,6 +30,7 @@ func (c *Client) passwordKey(ctx context.Context) (int, *rsa.PublicKey, error) {
 		return 0, nil, err
 	}
 	_ = resp.Body.Close()
+	debugLog.Printf("← %d GET /api/v1/qe/sync/ (password key, %s), key id header %q", resp.StatusCode, resp.Proto, resp.Header.Get("ig-set-password-encryption-key-id"))
 	id, err := strconv.Atoi(resp.Header.Get("ig-set-password-encryption-key-id"))
 	if err != nil {
 		return 0, nil, fmt.Errorf("password key id missing (HTTP %d)", resp.StatusCode)
