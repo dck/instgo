@@ -8,12 +8,12 @@ import (
 )
 
 var (
-	accent    = lipgloss.Color("205")
-	accentAlt = lipgloss.Color("39")
-	muted     = lipgloss.Color("244")
-	faint     = lipgloss.Color("238")
-	danger    = lipgloss.Color("203")
-	ok        = lipgloss.Color("42")
+	accent    = lipgloss.Color("248")
+	accentAlt = lipgloss.Color("245")
+	muted     = lipgloss.Color("242")
+	faint     = lipgloss.Color("237")
+	danger    = lipgloss.Color("131")
+	ok        = lipgloss.Color("65")
 
 	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(accent)
 	mutedStyle = lipgloss.NewStyle().Foreground(muted)
