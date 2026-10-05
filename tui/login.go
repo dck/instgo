@@ -65,7 +65,7 @@ func newLogin(client *ig.Client, notice string) loginModel {
 	code.CharLimit = 8
 	code.SetWidth(32)
 
-	return loginModel{
+	m := loginModel{
 		client:  client,
 		user:    user,
 		pass:    pass,
@@ -73,10 +73,12 @@ func newLogin(client *ig.Client, notice string) loginModel {
 		spinner: spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(lipgloss.NewStyle().Foreground(accent))),
 		err:     notice,
 	}
+	m.focus()
+	return m
 }
 
 func (m loginModel) Init() tea.Cmd {
-	return m.focus()
+	return textinput.Blink
 }
 
 func (m *loginModel) resize(w, h int) {
