@@ -11,7 +11,10 @@ import (
 	"github.com/dck/instgo/ig"
 )
 
-const groupGap = 5 * time.Minute
+const (
+	groupGap      = 5 * time.Minute
+	maxInputLines = 5
+)
 
 var (
 	meStyle     = lipgloss.NewStyle().Bold(true).Foreground(accentAlt)
@@ -24,11 +27,25 @@ func (m *chatModel) resize(w, h int) {
 	m.width, m.height = w, h
 	rw := m.chatWidth()
 	m.vp.SetWidth(rw)
-	m.vp.SetHeight(max(1, h-1-2-4))
-	m.input.SetWidth(max(1, rw-3))
+	m.input.SetWidth(max(1, rw))
+	m.vp.SetHeight(m.vpHeight())
 	m.filter.SetWidth(max(1, m.listWidth()-6))
 	m.scrollList()
 	m.refreshView(false)
+}
+
+// vpHeight is what's left of the chat pane after the status bar, borders,
+// title, two dividers and the input.
+func (m *chatModel) vpHeight() int {
+	return max(1, m.height-1-2-3-m.input.Height())
+}
+
+// fitInput shrinks the message viewport as the input grows, and back.
+func (m *chatModel) fitInput() {
+	if h := m.vpHeight(); h != m.vp.Height() {
+		m.vp.SetHeight(h)
+		m.refreshView(false)
+	}
 }
 
 func (m *chatModel) listWidth() int {
@@ -197,7 +214,7 @@ func (m *chatModel) renderStatus() string {
 	case m.filtering:
 		hints = "type to filter · enter open · esc clear"
 	case m.focus == focusInput:
-		hints = "enter send · esc back · ↑↓/pgup/pgdn scroll · ctrl+r retry"
+		hints = "enter send · shift+enter newline · esc back · ↑↓/pgup/pgdn scroll · ctrl+r retry"
 	default:
 		hints = "j/k move · enter chat · / filter · r refresh · q quit"
 	}

@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -88,7 +90,7 @@ type chatModel struct {
 	filter    textinput.Model
 	disguised bool
 
-	input   textinput.Model
+	input   textarea.Model
 	vp      viewport.Model
 	spinner spinner.Model
 	queue   []*pending
@@ -106,10 +108,23 @@ type chatModel struct {
 }
 
 func newChat(client *ig.Client) chatModel {
-	input := textinput.New()
-	input.Prompt = "› "
+	input := textarea.New()
+	input.SetPromptFunc(2, func(info textarea.PromptInfo) string {
+		if info.LineNumber == 0 {
+			return "› "
+		}
+		return "  "
+	})
+	input.ShowLineNumbers = false
 	input.Placeholder = "Message…"
 	input.CharLimit = 1000
+	input.DynamicHeight = true
+	input.MaxHeight = maxInputLines
+	input.MaxContentHeight = 100
+	input.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("shift+enter", "alt+enter", "ctrl+j"))
+	styles := input.Styles()
+	styles.Focused.CursorLine = lipgloss.NewStyle()
+	input.SetStyles(styles)
 
 	filter := textinput.New()
 	filter.Prompt = "/ "
@@ -241,6 +256,7 @@ func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
 			cmds = append(cmds, cmd)
+			m.fitInput()
 		}
 	}
 	return m, tea.Batch(cmds...)
@@ -421,6 +437,7 @@ func (m *chatModel) onKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
+		m.fitInput()
 		return cmd
 	}
 	switch key {
@@ -493,6 +510,7 @@ func (m *chatModel) submit() tea.Cmd {
 		return nil
 	}
 	m.input.Reset()
+	m.fitInput()
 	p := &pending{clientContext: ig.NewClientContext(), threadID: tv.thread.ThreadID, text: text, at: time.Now()}
 	tv.pending = append(tv.pending, p)
 	m.queue = append(m.queue, p)
