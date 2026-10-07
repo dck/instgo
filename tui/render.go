@@ -252,7 +252,7 @@ func (m *chatModel) renderMessages(tv *threadView, width int) string {
 		header(string(it.UserID), at)
 		if it.RepliedTo != nil {
 			quote := "↪ " + m.mask(oneLine(itemText(*it.RepliedTo)))
-			out = append(out, body.Render(faintStyle.Render(ansi.Truncate(quote, max(1, width-2), "…"))))
+			out = append(out, body.Render(mutedStyle.Render(ansi.Truncate(quote, max(1, width-2), "…"))))
 		}
 		out = append(out, body.Render(m.mask(itemText(it))))
 	}
