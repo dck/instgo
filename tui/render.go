@@ -33,9 +33,9 @@ func (m *chatModel) resize(w, h int) {
 
 func (m *chatModel) listWidth() int {
 	if m.width < 72 {
-		return max(18, m.width/3)
+		return max(16, m.width/4)
 	}
-	return min(42, max(28, m.width*3/10))
+	return min(30, max(22, m.width/5))
 }
 
 func (m *chatModel) chatWidth() int {
