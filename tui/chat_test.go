@@ -29,3 +29,13 @@ func TestMergeItemsOlderPrepends(t *testing.T) {
 		t.Fatalf("got %s", got)
 	}
 }
+
+func TestViewFitsTinyWindows(t *testing.T) {
+	m := newChat(ig.New(ig.NewSession(), ""))
+	for h := 1; h <= 12; h++ {
+		for _, w := range []int{1, 20, 80} {
+			m.resize(w, h)
+			_ = m.View()
+		}
+	}
+}

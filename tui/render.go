@@ -14,6 +14,9 @@ import (
 const (
 	groupGap      = 5 * time.Minute
 	maxInputLines = 5
+	// minHeight fits the status bar, both pane borders, the chat title, two
+	// dividers, one input line and one message line.
+	minHeight = 8
 )
 
 var (
@@ -86,6 +89,9 @@ func (m *chatModel) refreshView(bottom bool) {
 func (m chatModel) View() string {
 	if m.width == 0 || m.height == 0 {
 		return ""
+	}
+	if m.height < minHeight {
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, mutedStyle.Render(m.mask("window too small")))
 	}
 	bodyH := m.height - 1
 	body := lipgloss.JoinHorizontal(lipgloss.Top, m.renderList(bodyH), m.renderChat(bodyH))
