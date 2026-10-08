@@ -48,6 +48,8 @@ The session is saved, so you only log in once.
 
 The mouse works too: click a conversation to open it, scroll with the wheel.
 
+The real text is also hidden automatically, as if you pressed `ctrl+x`, after 20 seconds without a key press or mouse action, and as soon as the terminal window loses focus. Focus detection needs a terminal that reports focus changes (in tmux, `set -g focus-events on`). Press `ctrl+x` to show the text again.
+
 ## Files
 
 instgo keeps its state in `$XDG_CONFIG_HOME/instgo/` (default `~/.config/instgo/`):

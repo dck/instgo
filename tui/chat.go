@@ -89,6 +89,7 @@ type chatModel struct {
 	filtering bool
 	filter    textinput.Model
 	disguised bool
+	lastInput time.Time
 
 	input   textarea.Model
 	vp      viewport.Model
@@ -134,20 +135,21 @@ func newChat(client *ig.Client) chatModel {
 	vp.MouseWheelDelta = 3
 
 	m := chatModel{
-		client:  client,
-		me:      client.UserID(),
-		byID:    map[string]*threadView{},
-		input:   input,
-		filter:  filter,
-		vp:      vp,
-		spinner: spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(lipgloss.NewStyle().Foreground(accent))),
+		client:    client,
+		me:        client.UserID(),
+		byID:      map[string]*threadView{},
+		input:     input,
+		filter:    filter,
+		vp:        vp,
+		spinner:   spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(lipgloss.NewStyle().Foreground(accent))),
+		lastInput: time.Now(),
 	}
 	m.inbox.loading = true
 	return m
 }
 
 func (m chatModel) Init() tea.Cmd {
-	return tea.Batch(m.fetchInbox(""), m.spinner.Tick, tick())
+	return tea.Batch(m.fetchInbox(""), m.spinner.Tick, tick(), idleCheck(idleHide))
 }
 
 func tick() tea.Cmd {
@@ -203,9 +205,17 @@ func (m *chatModel) fail(err error) tea.Cmd {
 
 func (m chatModel) Update(msg tea.Msg) (chatModel, tea.Cmd) {
 	var cmds []tea.Cmd
+	switch msg.(type) {
+	case tea.KeyPressMsg, tea.MouseMsg, tea.PasteMsg:
+		m.lastInput = time.Now()
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.resize(msg.Width, msg.Height)
+	case idleMsg:
+		cmds = append(cmds, m.onIdle())
+	case tea.BlurMsg:
+		m.setDisguised(true)
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -388,7 +398,7 @@ func (m *chatModel) sendNext() tea.Cmd {
 func (m *chatModel) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	key := msg.String()
 	if key == "ctrl+x" {
-		m.toggleDisguise()
+		m.setDisguised(!m.disguised)
 		return nil
 	}
 	if m.filtering {

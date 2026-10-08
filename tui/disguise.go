@@ -3,8 +3,15 @@ package tui
 import (
 	"hash/fnv"
 	"strings"
+	"time"
 	"unicode"
+
+	tea "charm.land/bubbletea/v2"
 )
+
+const idleHide = 20 * time.Second
+
+type idleMsg struct{}
 
 var decoyWords = strings.Fields(`
 	update function config module handler request response client server cache
@@ -58,8 +65,23 @@ func scramble(s string) string {
 	return strings.Join(out, " ")
 }
 
-func (m *chatModel) toggleDisguise() {
-	m.disguised = !m.disguised
+func (m *chatModel) setDisguised(on bool) {
+	if m.disguised == on {
+		return
+	}
+	m.disguised = on
 	m.input.Placeholder = m.mask("Message…")
 	m.refreshView(false)
+}
+
+func idleCheck(after time.Duration) tea.Cmd {
+	return tea.Tick(after, func(time.Time) tea.Msg { return idleMsg{} })
+}
+
+func (m *chatModel) onIdle() tea.Cmd {
+	if left := idleHide - time.Since(m.lastInput); left > 0 {
+		return idleCheck(left)
+	}
+	m.setDisguised(true)
+	return idleCheck(idleHide)
 }

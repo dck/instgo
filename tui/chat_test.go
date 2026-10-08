@@ -2,6 +2,9 @@ package tui
 
 import (
 	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/dck/instgo/ig"
 )
@@ -37,5 +40,35 @@ func TestViewFitsTinyWindows(t *testing.T) {
 			m.resize(w, h)
 			_ = m.View()
 		}
+	}
+}
+
+func idleTestChat(t *testing.T) chatModel {
+	return newChat(ig.New(ig.NewSession(), t.TempDir()+"/session.json"))
+}
+
+func TestIdleHidesTextAfterTimeout(t *testing.T) {
+	m := idleTestChat(t)
+	m.lastInput = time.Now().Add(-idleHide - time.Second)
+	m, _ = m.Update(idleMsg{})
+	if !m.disguised {
+		t.Fatal("text still shown after idle timeout")
+	}
+}
+
+func TestIdleKeepsTextWhileActive(t *testing.T) {
+	m := idleTestChat(t)
+	m, _ = m.Update(tea.KeyPressMsg{Code: 'j'})
+	m, _ = m.Update(idleMsg{})
+	if m.disguised {
+		t.Fatal("text hidden right after a key press")
+	}
+}
+
+func TestBlurHidesText(t *testing.T) {
+	m := idleTestChat(t)
+	m, _ = m.Update(tea.BlurMsg{})
+	if !m.disguised {
+		t.Fatal("text still shown after losing focus")
 	}
 }

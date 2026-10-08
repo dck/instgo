@@ -91,6 +91,7 @@ func (a App) View() tea.View {
 	if a.screen == screenChat {
 		v = tea.NewView(a.chat.View())
 		v.MouseMode = tea.MouseModeCellMotion
+		v.ReportFocus = true
 	} else {
 		v = tea.NewView(a.login.View())
 	}
