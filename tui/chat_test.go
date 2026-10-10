@@ -72,3 +72,40 @@ func TestBlurHidesText(t *testing.T) {
 		t.Fatal("text still shown after losing focus")
 	}
 }
+
+func TestUnavailable(t *testing.T) {
+	cases := []struct {
+		name   string
+		thread ig.Thread
+		want   bool
+	}{
+		{"active user", ig.Thread{Users: []ig.User{{PK: "2", Username: "bob"}}}, false},
+		{"no username", ig.Thread{Users: []ig.User{{PK: "2", FullName: "Instagram User"}}}, true},
+		{"no users", ig.Thread{}, true},
+		{"only me", ig.Thread{Users: []ig.User{{PK: "1", Username: "me"}}}, true},
+		{"group", ig.Thread{IsGroup: true}, false},
+	}
+	for _, c := range cases {
+		if got := unavailable(c.thread, "1"); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestUnavailableChatCannotBeWritten(t *testing.T) {
+	m := idleTestChat(t)
+	m.me = "1"
+	tv := &threadView{thread: ig.Thread{ThreadID: "t", Users: []ig.User{{PK: "2"}}}}
+	m.threads = []*threadView{tv}
+	m.byID["t"] = tv
+	m.openID = "t"
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.focus == focusInput {
+		t.Fatal("message box focused for an unavailable chat")
+	}
+	m.input.SetValue("hi")
+	m.submit()
+	if len(m.queue) != 0 {
+		t.Fatal("message queued for an unavailable chat")
+	}
+}

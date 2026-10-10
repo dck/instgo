@@ -483,7 +483,7 @@ func (m *chatModel) onKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.vp.HalfPageDown()
 		return nil
 	case "enter", "l", "right", "tab", "i":
-		if m.open() == nil {
+		if !m.writable() {
 			return nil
 		}
 		m.focus = focusInput
@@ -494,7 +494,7 @@ func (m *chatModel) onKey(msg tea.KeyPressMsg) tea.Cmd {
 
 func (m *chatModel) onClick(mouse tea.Mouse) tea.Cmd {
 	if mouse.X >= m.listWidth() {
-		if m.open() == nil {
+		if !m.writable() {
 			return nil
 		}
 		m.focus = focusInput
@@ -516,7 +516,7 @@ func (m *chatModel) onClick(mouse tea.Mouse) tea.Cmd {
 func (m *chatModel) submit() tea.Cmd {
 	text := strings.TrimSpace(m.input.Value())
 	tv := m.open()
-	if text == "" || tv == nil {
+	if text == "" || !m.writable() {
 		return nil
 	}
 	m.input.Reset()
@@ -606,6 +606,11 @@ func (m *chatModel) bumpThread(tv *threadView) {
 	}
 	m.threads = slices.Insert(slices.Delete(m.threads, i, i+1), 0, tv)
 	m.reselect(selectedID)
+}
+
+func (m *chatModel) writable() bool {
+	tv := m.open()
+	return tv != nil && !unavailable(tv.thread, m.me)
 }
 
 func (m *chatModel) open() *threadView {

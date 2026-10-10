@@ -50,6 +50,8 @@ The mouse works too: click a conversation to open it, scroll with the wheel.
 
 The real text is also hidden automatically, as if you pressed `ctrl+x`, after 20 seconds without a key press or mouse action, and as soon as the terminal window loses focus. Focus detection needs a terminal that reports focus changes (in tmux, `set -g focus-events on`). Press `ctrl+x` to show the text again.
 
+A one-to-one conversation is greyed out and struck through in the list when Instagram returns it without the other person's username, and you cannot write to it. Most likely they blocked you or their account was deactivated or deleted. Instagram does not say which, so instgo cannot either.
+
 ## Files
 
 instgo keeps its state in `$XDG_CONFIG_HOME/instgo/` (default `~/.config/instgo/`):

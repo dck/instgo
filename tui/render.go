@@ -160,6 +160,11 @@ func (m *chatModel) renderRow(tv *threadView, selected bool, width int) []string
 	} else if tv.thread.LastActivityAt > 0 {
 		when = shortTime(tv.thread.LastActivityAt.Time())
 	}
+	previewStyle := mutedStyle
+	if unavailable(tv.thread, m.me) {
+		nameStyle = faintStyle.Strikethrough(true)
+		previewStyle = faintStyle
+	}
 	nameW := max(1, width-3-lipgloss.Width(when)-1)
 	name := nameStyle.Render(ansi.Truncate(m.mask(threadName(tv.thread, m.me)), nameW, "…"))
 	gap := max(1, width-1-2-lipgloss.Width(name)-lipgloss.Width(when))
@@ -176,7 +181,7 @@ func (m *chatModel) renderRow(tv *threadView, selected bool, width int) []string
 	if n := len(tv.pending); n > 0 {
 		preview = "You: " + oneLine(tv.pending[n-1].text)
 	}
-	line2 := bar + "  " + mutedStyle.Render(ansi.Truncate(m.mask(preview), max(1, width-3), "…"))
+	line2 := bar + "  " + previewStyle.Render(ansi.Truncate(m.mask(preview), max(1, width-3), "…"))
 	return []string{line1, line2}
 }
 
@@ -198,7 +203,10 @@ func (m *chatModel) renderChat(h int) string {
 	}
 	divider := faintStyle.Render(strings.Repeat("─", inner))
 	input := m.input.View()
-	if !focused {
+	switch {
+	case unavailable(tv.thread, m.me):
+		input = faintStyle.Render(m.mask("› account unavailable, messages can't be sent"))
+	case !focused:
 		input = mutedStyle.Render(m.mask("› press enter to write a message"))
 	}
 	lines := []string{ansi.Truncate(title, inner, "…"), divider, m.vp.View(), divider, input}
@@ -349,6 +357,18 @@ func threadName(t ig.Thread, me string) string {
 		return orDefault(t.Title, "Unknown")
 	}
 	return strings.Join(names, ", ")
+}
+
+func unavailable(t ig.Thread, me string) bool {
+	if t.IsGroup {
+		return false
+	}
+	for _, u := range t.Users {
+		if string(u.PK) != me && u.Username != "" {
+			return false
+		}
+	}
+	return true
 }
 
 func usernames(t ig.Thread) string {
